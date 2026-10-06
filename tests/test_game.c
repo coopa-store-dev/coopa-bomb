@@ -196,6 +196,36 @@ static void test_garbage_ignored(void) {  // Review Focus 4
     mirror();  // 连回来以主动方为准
 }
 
+// 外壳每帧 dt 最多 100 ms:卡一顿(截图、写 Flash),这边的倒数就比对方慢。对方倒数完扔过来 / 炸了,
+// 这边还在倒数也要接住 / 记分,不然两边都不拿炸弹,这一回合永远卡住(真卡上碰到过)。
+static void lag_count(bomb_t *h) {
+    for (uint32_t t = 0; t < BOMB_COUNT_MS + 20; t += 10) bomb_tick(h, 10);
+    assert(h->phase == BP_PLAY && other(h)->phase == BP_COUNT);
+}
+
+static void test_throw_while_peer_counting(void) {
+    duo_init();
+    duo_connect();
+    flow();
+    bomb_t *h = holder(), *o = other(h);
+    lag_count(h);
+    uint32_t left = h->remain_ms;
+    assert(bomb_press(h));
+    flow();
+    assert(o->phase == BP_PLAY && o->holding && o->remain_ms == left && o->throws == 1);
+}
+
+static void test_boom_while_peer_counting(void) {
+    duo_init();
+    duo_connect();
+    flow();
+    bomb_t *h = holder(), *o = other(h);
+    lag_count(h);
+    while (h->phase == BP_PLAY) bomb_tick(h, 10);
+    flow();
+    assert(o->phase == BP_BOOM && o->score_me == 1 && h->score_peer == 1);
+}
+
 static void test_heat_only_elapsed(void) {
     bomb_t g;
     memset(&g, 0, sizeof(g));
@@ -213,6 +243,8 @@ static void test_heat_only_elapsed(void) {
 }
 
 int main(void) {
+    test_throw_while_peer_counting();
+    test_boom_while_peer_counting();
     test_start();
     test_throw_and_catch();
     test_press_only_when_allowed();

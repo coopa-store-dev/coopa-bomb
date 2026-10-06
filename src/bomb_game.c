@@ -131,10 +131,19 @@ static void on_round(bomb_t *g, const uint8_t *m, size_t len) {
     begin(g, m[5], holder == 1, fuse, delay);
 }
 
+// 对方扔过来 / 炸了,说明它的倒数已经完了;这边的倒数可能因为卡顿慢一点,直接结束(否则消息被丢、回合卡住)。
+static bool playing(bomb_t *g) {
+    if (g->phase == BP_COUNT) {
+        g->delay_ms = 0;
+        g->phase = BP_PLAY;
+    }
+    return g->phase == BP_PLAY;
+}
+
 static void on_throw(bomb_t *g, const uint8_t *m, size_t len) {
-    if (len < 10 || get32(m + 1) != g->match || m[5] != g->round || g->phase != BP_PLAY || g->holding) return;
+    if (len < 10 || get32(m + 1) != g->match || m[5] != g->round || g->holding) return;
     uint16_t left = get16(m + 8);
-    if (left > BOMB_FUSE_MAX) return;
+    if (left > BOMB_FUSE_MAX || !playing(g)) return;
     g->holding = true;
     g->remain_ms = left;
     g->hold_ms = 0;
@@ -143,7 +152,7 @@ static void on_throw(bomb_t *g, const uint8_t *m, size_t len) {
 }
 
 static void on_boom(bomb_t *g, const uint8_t *m, size_t len) {
-    if (len < 6 || get32(m + 1) != g->match || m[5] != g->round || g->phase != BP_PLAY || g->holding) return;
+    if (len < 6 || get32(m + 1) != g->match || m[5] != g->round || g->holding || !playing(g)) return;
     if (g->score_me < BOMB_WIN) g->score_me++;
     g->decided = true;
     g->loser_me = false;
