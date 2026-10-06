@@ -4,7 +4,7 @@ CFLAGS := -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fn
           -I../src -I.
 OUT := .build
 HDRS := $(wildcard ../src/*.h) $(wildcard *.h)
-TESTS := test_game
+TESTS := test_game test_match
 
 all: $(addprefix $(OUT)/,$(TESTS))
 	@for t in $(TESTS); do $(OUT)/$$t || exit 1; done
@@ -14,6 +14,9 @@ $(OUT):
 	mkdir -p $@
 
 $(OUT)/test_game: test_game.c duo.c ../src/bomb_game.c $(HDRS) | $(OUT)
+	$(CC) $(CFLAGS) $(filter %.c,$^) -o $@
+
+$(OUT)/test_match: test_match.c duo.c ../src/bomb_game.c $(HDRS) | $(OUT)
 	$(CC) $(CFLAGS) $(filter %.c,$^) -o $@
 
 .PHONY: all
