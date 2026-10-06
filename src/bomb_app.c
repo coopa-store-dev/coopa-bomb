@@ -231,8 +231,10 @@ static void bomb_frame(uint32_t dt) {
     else show_link(st);
 }
 
+// 一场没打完(包括断线等对方回来)都不让屏幕熄:对方一回来炸弹就在烧,黑屏时第一下 ● 只会点亮屏幕。
 static unsigned bomb_busy(void) {
-    return s_page == PG_GAME && s_g.phase != BP_OVER ? KIT_BUSY_TIMING : 0;
+    bool mid = s_page == PG_GAME ? s_g.phase != BP_OVER : s_page == PG_LINK && s_g.match && !bomb_over(&s_g);
+    return mid ? KIT_BUSY_TIMING : 0;
 }
 
 static bool bomb_won(void) { return s_save.wins > 0; }

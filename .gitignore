@@ -3,3 +3,4 @@
 
 # 宿主测试的产物
 tests/.build/
+__pycache__/

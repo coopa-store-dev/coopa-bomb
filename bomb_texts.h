@@ -2,7 +2,7 @@
 #pragma once
 
 #define BX_TITLE "库巴传炸弹"
-#define BX_SUB "炸弹传来传去，炸在谁手里谁输"
+#define BX_SUB "炸弹传来传去，谁炸谁输"
 #define BX_START "开始"
 #define BX_BACK "回菜单"
 #define BX_WINS "赢了 %u 场"
