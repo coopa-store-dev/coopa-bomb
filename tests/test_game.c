@@ -226,6 +226,49 @@ static void test_boom_while_peer_counting(void) {
     assert(o->phase == BP_BOOM && o->score_me == 1 && h->score_peer == 1);
 }
 
+// 赛点炸在被连方手里,BOOM 还没送到就断线:被连方不能自己判这场打完(不然记一场输、放结束音,连回来又接着打)。
+static void test_responder_never_ends_match_alone(void) {  // Review Focus 1 + 5
+    for (uint32_t seed = 1;; seed++) {
+        duo_seed(seed);
+        start();
+        if (holder() == &D.b) break;
+    }
+    D.a.score_me = D.a.score_peer = D.b.score_me = D.b.score_peer = 2;
+    uint8_t ev;
+    while (bomb_event(&D.b, &ev)) {}
+    uint32_t left = D.b.remain_ms;
+    for (uint32_t t = 0; t < left + BOMB_NEXT_MS + 1000; t += 10) {  // 只走时间不送消息
+        bomb_tick(&D.a, 10);
+        bomb_tick(&D.b, 10);
+    }
+    while (bomb_event(&D.b, &ev)) assert(ev != BE_OVER);
+    assert(D.b.phase != BP_OVER);
+    duo_drop();
+    duo_connect();
+    flow();
+    mirror();
+    assert(D.a.score_me == 2 && D.a.score_peer == 2 && D.b.phase == BP_COUNT);
+}
+
+// 赛点正常炸了:被连方等主动方说「打完了」才结束,两边都只结束一次。
+static void test_match_point_ends_once(void) {
+    for (uint32_t seed = 1;; seed++) {
+        duo_seed(seed);
+        start();
+        if (holder() == &D.b) break;
+    }
+    D.a.score_me = D.a.score_peer = D.b.score_me = D.b.score_peer = 2;
+    uint8_t ev;
+    while (bomb_event(&D.a, &ev)) {}
+    while (bomb_event(&D.b, &ev)) {}
+    run(D.b.remain_ms + BOMB_NEXT_MS + 500);
+    int over_a = 0, over_b = 0;
+    while (bomb_event(&D.a, &ev)) over_a += ev == BE_OVER;
+    while (bomb_event(&D.b, &ev)) over_b += ev == BE_OVER;
+    assert(over_a == 1 && over_b == 1);
+    assert(D.a.phase == BP_OVER && D.b.phase == BP_OVER && D.a.score_me == 3 && D.b.score_peer == 3);
+}
+
 static void test_heat_only_elapsed(void) {
     bomb_t g;
     memset(&g, 0, sizeof(g));
@@ -243,6 +286,8 @@ static void test_heat_only_elapsed(void) {
 }
 
 int main(void) {
+    test_responder_never_ends_match_alone();
+    test_match_point_ends_once();
     test_throw_while_peer_counting();
     test_boom_while_peer_counting();
     test_start();

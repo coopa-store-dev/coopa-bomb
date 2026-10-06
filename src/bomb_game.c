@@ -244,8 +244,13 @@ void bomb_tick(bomb_t *g, uint32_t dt) {
                 break;
             }
             g->next_ms = 0;
-            if (bomb_over(g)) finish(g);
-            else if (g->initiator) start_round(g, (uint8_t)(g->round + 1), 0);
+            if (!g->initiator) break;  // 被连方:等主动方的 ROUND(打完了也由它说,BOOM 可能没送到)
+            if (bomb_over(g)) {
+                send_round(g, BOMB_NOBODY, 0, 0);
+                finish(g);
+            } else {
+                start_round(g, (uint8_t)(g->round + 1), 0);
+            }
             break;
         default: break;
     }
