@@ -32,6 +32,8 @@ static void event(bomb_t *g, uint8_t e) {
     g->ev_n++;
 }
 
+static void send_throw(bomb_t *g, uint8_t skill, bool perfect);
+
 static uint8_t add_en(uint8_t en, uint8_t n) { return en + n > BOMB_EN_MAX ? BOMB_EN_MAX : (uint8_t)(en + n); }
 
 bool bomb_over(const bomb_t *g) { return g->score_me >= BOMB_WIN || g->score_peer >= BOMB_WIN; }
@@ -42,6 +44,17 @@ static void finish(bomb_t *g) {
     event(g, BE_OVER);
 }
 
+// 拿到一次炸弹就重新算的东西(扔出去 / 新回合时清掉)。
+static void clear_hold(bomb_t *g) {
+    g->hold_ms = 0;
+    g->catch_ms = BOMB_CATCH_MS;
+    g->aim_x1000 = 0;
+    g->miss_ms = g->freeze_ms = g->guard_ms = 0;
+    g->cage_left = g->decoy = 0;
+    g->decoy_sel = 1;
+    g->nag = g->fast = g->pushing = false;
+}
+
 // 两边开一回合的同一段:炸弹给谁、引信多长、要不要先倒数。
 static void begin(bomb_t *g, uint8_t round, bool mine, uint16_t fuse, uint16_t delay) {
     g->round = round;
@@ -49,10 +62,10 @@ static void begin(bomb_t *g, uint8_t round, bool mine, uint16_t fuse, uint16_t d
     g->holding = mine;
     g->remain_ms = fuse;
     g->elapsed_ms = 0;
+    clear_hold(g);
     g->hold_ms = BOMB_CATCH_MS;  // 开局拿到的不用等「接住」
-    g->catch_ms = BOMB_CATCH_MS;
-    g->aim_x1000 = 0;
-    g->miss_ms = 0;
+    g->lid = g->taiji = false;
+    g->glasses_left = 0;
     g->throws = 0;
     g->delay_ms = delay;
     g->next_ms = 0;
@@ -226,16 +239,30 @@ static void on_throw(bomb_t *g, const uint8_t *m, size_t len) {
     if (len < 15 || get32(m + 1) != g->match || m[5] != g->round || g->holding) return;
     uint16_t left = get16(m + 8), elapsed = get16(m + 13);
     if (left > BOMB_FUSE_MAX || m[10] >= SK_COUNT || m[11] > BOMB_EN_MAX || !playing(g)) return;
+    uint8_t sk = m[10];
     g->holding = true;
     g->remain_ms = left;
-    g->hold_ms = 0;
-    g->catch_ms = BOMB_CATCH_MS;
-    g->aim_x1000 = 0;
-    g->miss_ms = 0;
+    clear_hold(g);
     g->throws = get16(m + 6);
     g->en_peer = m[11];
     g->elapsed_ms = elapsed;  // 对齐对方的红度(卡顿时两边的时钟会差开)
     event(g, BE_GOT);
+    if (g->taiji) {  // 太极架势:停一下就推回去,对方的招作废
+        g->taiji = false;
+        g->pushing = true;
+        g->freeze_ms = BOMB_TAIJI_MS;
+        event(g, BE_TAIJI);
+        return;
+    }
+    g->freeze_ms = bomb_skill_freeze(sk);
+    g->skill_in = sk;
+    if (sk == SK_SLING) g->catch_ms = BOMB_SLING_CATCH_MS;
+    if (sk == SK_ROCKET) g->fast = true;
+    if (sk == SK_CAGE) g->cage_left = BOMB_CAGE_HITS;
+    if (sk == SK_NAG) g->nag = true;
+    if (sk == SK_DECOY) g->decoy = (uint8_t)(1 + (g->rnd() & 1));
+    if (bomb_skill_hits(sk)) g->en_me = add_en(g->en_me, 1);
+    if (sk) event(g, BE_SKILL_IN);
 }
 
 static void on_boom(bomb_t *g, const uint8_t *m, size_t len) {
@@ -308,14 +335,30 @@ void bomb_tick(bomb_t *g, uint32_t dt) {
         case BP_PLAY:
             g->elapsed_ms += dt;
             if (!g->holding) break;
+            if (g->freeze_ms) {  // 特写 / 闪字:引信不烧;多出来的时间下一帧再算
+                g->freeze_ms = g->freeze_ms > dt ? g->freeze_ms - dt : 0;
+                if (!g->freeze_ms && g->pushing) send_throw(g, SK_TAIJI_PUSH, false);
+                break;
+            }
             g->hold_ms += dt;
-            if (g->hold_ms >= g->catch_ms) {
+            if (g->hold_ms >= g->catch_ms && !g->cage_left) {
                 bomb_aim_t a = bomb_aim_now(g);
                 g->aim_x1000 = (g->aim_x1000 + dt * a.speed_x1000) % 2000000u;
             }
             g->miss_ms = g->miss_ms > dt ? g->miss_ms - dt : 0;
-            if (dt < g->remain_ms) {
-                g->remain_ms -= dt;
+            g->guard_ms = g->guard_ms > dt ? g->guard_ms - dt : 0;
+            {
+                uint32_t burn = g->fast ? 2 * dt : dt;
+                if (burn < g->remain_ms) {
+                    g->remain_ms -= burn;
+                    break;
+                }
+            }
+            if (g->lid) {  // 锅盖:崩回去,对方只剩 3 秒
+                g->lid = false;
+                g->remain_ms = BOMB_LID_MS;
+                event(g, BE_LID);
+                send_throw(g, SK_LID_BOUNCE, false);
                 break;
             }
             g->remain_ms = 0;  // 炸在我手里:对方得一分
@@ -354,7 +397,8 @@ void bomb_tick(bomb_t *g, uint32_t dt) {
 }
 
 bool bomb_can_throw(const bomb_t *g) {
-    return g->phase == BP_PLAY && g->holding && g->hold_ms >= g->catch_ms && !g->miss_ms;
+    return g->phase == BP_PLAY && g->holding && !g->freeze_ms && g->hold_ms >= g->catch_ms && !g->miss_ms &&
+           !g->cage_left && !g->decoy && !g->guard_ms;
 }
 
 uint16_t bomb_aim_pos(const bomb_t *g) {
@@ -362,11 +406,12 @@ uint16_t bomb_aim_pos(const bomb_t *g) {
     return (uint16_t)(u < 1000 ? u : 2000 - u);
 }
 
-bomb_aim_t bomb_aim_now(const bomb_t *g) { return bomb_aim_params(bomb_heat(g), false, false); }
+bomb_aim_t bomb_aim_now(const bomb_t *g) { return bomb_aim_params(bomb_heat(g), g->nag, g->glasses_left > 0); }
 
 // 扔出去(瞄准扔中,或者放招):把剩下的引信、招式、扔完的能量、回合过去多久带过去。
 static void send_throw(bomb_t *g, uint8_t skill, bool perfect) {
     g->holding = false;
+    clear_hold(g);
     g->throws++;
     uint8_t m[15] = { 'T' };
     put32(m + 1, g->match);
@@ -391,7 +436,9 @@ static bool aim_throw(bomb_t *g) {
         return true;
     }
     bool perfect = off <= a.perfect_half;
-    if (perfect) {
+    if (g->glasses_left) {  // 戴着老花镜扔的不加能量(免得连着完美滚雪球)
+        g->glasses_left--;
+    } else if (perfect) {
         g->en_me = add_en(g->en_me, BOMB_EN_PERFECT);
         event(g, BE_PERFECT);
     }
@@ -401,8 +448,50 @@ static bool aim_throw(bomb_t *g) {
 
 bool bomb_press(bomb_t *g) { return bomb_key(g, BK_OK); }
 
+// 现在能砸笼子 / 选影分身(冻结、接住冷却、弹回都过了)
+static bool hands_free(const bomb_t *g) {
+    return g->phase == BP_PLAY && g->holding && !g->freeze_ms && g->hold_ms >= g->catch_ms && !g->miss_ms;
+}
+
+static bool cast(bomb_t *g, bool super) {
+    uint8_t sk = bomb_skill_of(g->me_char, super);
+    if (!sk || !bomb_can_throw(g) || g->en_me < bomb_skill_cost(sk)) return false;
+    g->en_me = (uint8_t)(g->en_me - bomb_skill_cost(sk));
+    if (sk == SK_LID) g->lid = true;
+    if (sk == SK_TAIJI) g->taiji = true;
+    g->skill_out = sk;
+    event(g, BE_SKILL_OUT);
+    send_throw(g, sk, false);
+    if (sk == SK_GLASSES) g->glasses_left = BOMB_GLASSES;  // 扔完才戴上:这一扔不算
+    return true;
+}
+
 bool bomb_key(bomb_t *g, uint8_t key) {
-    if (key != BK_OK) return false;
+    if (g->cage_left && g->phase == BP_PLAY && g->holding && !g->freeze_ms) {  // 砸笼子不用等「接住」
+        if (key != BK_OK) return false;
+        g->cage_left--;
+        event(g, BE_CAGE_HIT);
+        if (!g->cage_left) {
+            g->guard_ms = BOMB_GUARD_MS;
+            event(g, BE_CAGE_OPEN);
+        }
+        return true;
+    }
+    if (g->decoy && hands_free(g)) {
+        if (key != BK_OK) {
+            g->decoy_sel = key == BK_UP ? 1 : 2;
+            return true;
+        }
+        bool real = g->decoy_sel == g->decoy;
+        g->decoy = 0;
+        if (!real) {
+            g->miss_ms = BOMB_DECOY_MS;
+            event(g, BE_DECOY_PUFF);
+            return true;
+        }
+        // 选对了:照常瞄准(下面)
+    }
+    if (key != BK_OK) return cast(g, key == BK_DOWN);
     if (bomb_can_throw(g)) return aim_throw(g);
     if (g->phase == BP_OVER && !g->me_again) {
         g->me_again = true;

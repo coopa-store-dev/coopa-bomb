@@ -35,8 +35,8 @@ void aim_at(bomb_t *g, uint16_t lo, uint16_t hi);
 void aim_solo(bomb_t *g, uint16_t lo, uint16_t hi);
 void throw_hit(bomb_t *g);      // 瞄准绿区(不在完美区)按 ●,断言扔出去了(不送达)
 void throw_perfect(bomb_t *g);  // 瞄准完美区按 ●
-#define HIT_LO 380
-#define HIT_HI 450
+#define HIT_LO 400  // 在最小的绿区里(念叨:半宽 105)、最大的完美区外(老花镜:半宽 60)
+#define HIT_HI 430
 #define PERFECT_LO 485
 #define PERFECT_HI 515
 bomb_t *holder(void);     // 拿着炸弹的那边(没人拿返回 NULL)

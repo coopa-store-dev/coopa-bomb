@@ -4,7 +4,7 @@ CFLAGS := -std=c11 -O1 -g -Wall -Wextra -Werror -fsanitize=address,undefined -fn
           -I../src -I.
 OUT := .build
 HDRS := $(wildcard ../src/*.h) $(wildcard *.h)
-TESTS := test_fighters test_game test_throw test_match test_save test_sprites test_peer_glue
+TESTS := test_fighters test_game test_throw test_skills test_match test_save test_sprites test_peer_glue
 
 all: $(addprefix $(OUT)/,$(TESTS))
 	@for t in $(TESTS); do $(OUT)/$$t || exit 1; done
@@ -17,6 +17,9 @@ $(OUT)/test_game: test_game.c duo.c ../src/bomb_game.c ../src/bomb_fighters.c $(
 	$(CC) $(CFLAGS) $(filter %.c,$^) -o $@
 
 $(OUT)/test_throw: test_throw.c duo.c ../src/bomb_game.c ../src/bomb_fighters.c $(HDRS) | $(OUT)
+	$(CC) $(CFLAGS) $(filter %.c,$^) -o $@
+
+$(OUT)/test_skills: test_skills.c duo.c ../src/bomb_game.c ../src/bomb_fighters.c $(HDRS) | $(OUT)
 	$(CC) $(CFLAGS) $(filter %.c,$^) -o $@
 
 $(OUT)/test_match: test_match.c duo.c ../src/bomb_game.c ../src/bomb_fighters.c $(HDRS) | $(OUT)
