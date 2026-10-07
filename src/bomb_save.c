@@ -33,3 +33,17 @@ bool bomb_save_over(bomb_save_t *s, uint32_t match, bool won) {
 uint8_t bomb_save_milestones(const bomb_save_t *s) {
     return (uint8_t)((s->rounds >= 1 ? 1u : 0u) | (s->wins >= 1 ? 2u : 0u) | (s->wins >= 10 ? 4u : 0u));
 }
+
+#define FIGHTERS 4  // = BF_COUNT(存档不依赖规则头文件)
+
+uint8_t bomb_save_pick(const bomb_save_t *s) { return s->pad[0] < FIGHTERS ? s->pad[0] : 0; }
+
+void bomb_save_set_pick(bomb_save_t *s, uint8_t fighter) { s->pad[0] = fighter < FIGHTERS ? fighter : 0; }
+
+bool bomb_save_crown(const bomb_save_t *s, uint8_t fighter) { return fighter < FIGHTERS && (s->pad[1] >> fighter & 1); }
+
+bool bomb_save_set_crown(bomb_save_t *s, uint8_t fighter) {
+    if (fighter >= FIGHTERS || bomb_save_crown(s, fighter)) return false;
+    s->pad[1] = (uint8_t)(s->pad[1] | 1u << fighter);
+    return true;
+}

@@ -13,7 +13,7 @@
 typedef struct {
     uint32_t magic;
     uint8_t ver;
-    uint8_t pad[3];
+    uint8_t pad[3];    // [0] 上次选的人(bomb_fighter_t),[1] 低 4 位:哪几个人闯关通关过;1.0 的存档里是 0
     uint16_t wins;
     uint16_t games;
     uint32_t rounds;   // 打完的回合(封顶)
@@ -26,3 +26,7 @@ bool bomb_save_round(bomb_save_t *s);                          // 打完一回�
 bool bomb_save_over(bomb_save_t *s, uint32_t match, bool won);  // 一场打完(同一场只记一次)
 // 里程碑位:0 第一次传炸弹(打完一回合)、1 赢一场、2 赢 10 场。
 uint8_t bomb_save_milestones(const bomb_save_t *s);
+uint8_t bomb_save_pick(const bomb_save_t *s);            // 上次选的人;不认识的值当 0(库巴)
+void bomb_save_set_pick(bomb_save_t *s, uint8_t fighter);
+bool bomb_save_crown(const bomb_save_t *s, uint8_t fighter);
+bool bomb_save_set_crown(bomb_save_t *s, uint8_t fighter);  // 返回 true = 新拿到

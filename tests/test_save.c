@@ -46,7 +46,22 @@ static void test_rejects_garbage(void) {
     assert(!bomb_save_valid(&s));
 }
 
+static void test_pick_and_crown(void) {
+    bomb_save_t s;
+    bomb_save_reset(&s);  // 和 1.0 的存档一样:pad 全 0
+    assert(bomb_save_pick(&s) == 0 && !bomb_save_crown(&s, 0) && !bomb_save_crown(&s, 3));
+    bomb_save_set_pick(&s, 2);
+    assert(bomb_save_pick(&s) == 2 && bomb_save_valid(&s));
+    s.pad[0] = 9;  // 坏的值当库巴
+    assert(bomb_save_pick(&s) == 0 && bomb_save_valid(&s));
+    assert(bomb_save_set_crown(&s, 3) && !bomb_save_set_crown(&s, 3));
+    assert(bomb_save_crown(&s, 3) && !bomb_save_crown(&s, 2) && !bomb_save_crown(&s, 7));
+    assert(!bomb_save_set_crown(&s, 4));  // 越界不记
+    assert(bomb_save_valid(&s) && bomb_save_milestones(&s) == 0);
+}
+
 int main(void) {
+    test_pick_and_crown();
     test_reset();
     test_over_counted_once();
     test_ten_wins();
