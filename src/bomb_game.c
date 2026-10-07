@@ -32,6 +32,8 @@ static void event(bomb_t *g, uint8_t e) {
     g->ev_n++;
 }
 
+static uint8_t add_en(uint8_t en, uint8_t n) { return en + n > BOMB_EN_MAX ? BOMB_EN_MAX : (uint8_t)(en + n); }
+
 bool bomb_over(const bomb_t *g) { return g->score_me >= BOMB_WIN || g->score_peer >= BOMB_WIN; }
 
 static void finish(bomb_t *g) {
@@ -48,6 +50,9 @@ static void begin(bomb_t *g, uint8_t round, bool mine, uint16_t fuse, uint16_t d
     g->remain_ms = fuse;
     g->elapsed_ms = 0;
     g->hold_ms = BOMB_CATCH_MS;  // 开局拿到的不用等「接住」
+    g->catch_ms = BOMB_CATCH_MS;
+    g->aim_x1000 = 0;
+    g->miss_ms = 0;
     g->throws = 0;
     g->delay_ms = delay;
     g->next_ms = 0;
@@ -218,19 +223,25 @@ static bool playing(bomb_t *g) {
 }
 
 static void on_throw(bomb_t *g, const uint8_t *m, size_t len) {
-    if (len < 10 || get32(m + 1) != g->match || m[5] != g->round || g->holding) return;
-    uint16_t left = get16(m + 8);
-    if (left > BOMB_FUSE_MAX || !playing(g)) return;
+    if (len < 15 || get32(m + 1) != g->match || m[5] != g->round || g->holding) return;
+    uint16_t left = get16(m + 8), elapsed = get16(m + 13);
+    if (left > BOMB_FUSE_MAX || m[10] >= SK_COUNT || m[11] > BOMB_EN_MAX || !playing(g)) return;
     g->holding = true;
     g->remain_ms = left;
     g->hold_ms = 0;
+    g->catch_ms = BOMB_CATCH_MS;
+    g->aim_x1000 = 0;
+    g->miss_ms = 0;
     g->throws = get16(m + 6);
+    g->en_peer = m[11];
+    g->elapsed_ms = elapsed;  // 对齐对方的红度(卡顿时两边的时钟会差开)
     event(g, BE_GOT);
 }
 
 static void on_boom(bomb_t *g, const uint8_t *m, size_t len) {
     if (len < 6 || get32(m + 1) != g->match || m[5] != g->round || g->holding || !playing(g)) return;
     if (g->score_me < BOMB_WIN) g->score_me++;
+    g->en_peer = add_en(g->en_peer, BOMB_EN_LOSE);
     g->decided = true;
     g->loser_me = false;
     g->phase = BP_BOOM;
@@ -298,6 +309,11 @@ void bomb_tick(bomb_t *g, uint32_t dt) {
             g->elapsed_ms += dt;
             if (!g->holding) break;
             g->hold_ms += dt;
+            if (g->hold_ms >= g->catch_ms) {
+                bomb_aim_t a = bomb_aim_now(g);
+                g->aim_x1000 = (g->aim_x1000 + dt * a.speed_x1000) % 2000000u;
+            }
+            g->miss_ms = g->miss_ms > dt ? g->miss_ms - dt : 0;
             if (dt < g->remain_ms) {
                 g->remain_ms -= dt;
                 break;
@@ -305,6 +321,7 @@ void bomb_tick(bomb_t *g, uint32_t dt) {
             g->remain_ms = 0;  // 炸在我手里:对方得一分
             g->holding = false;
             if (g->score_peer < BOMB_WIN) g->score_peer++;
+            g->en_me = add_en(g->en_me, BOMB_EN_LOSE);
             g->decided = true;
             g->loser_me = true;
             g->phase = BP_BOOM;
@@ -336,19 +353,57 @@ void bomb_tick(bomb_t *g, uint32_t dt) {
     }
 }
 
-bool bomb_press(bomb_t *g) {
-    if (g->phase == BP_PLAY && g->holding && g->hold_ms >= BOMB_CATCH_MS) {
-        g->holding = false;
-        g->throws++;
-        uint8_t m[10] = { 'T' };
-        put32(m + 1, g->match);
-        m[5] = g->round;
-        put16(m + 6, g->throws);
-        put16(m + 8, (uint16_t)g->remain_ms);
-        enqueue(g, m, sizeof(m));
-        event(g, BE_THROWN);
+bool bomb_can_throw(const bomb_t *g) {
+    return g->phase == BP_PLAY && g->holding && g->hold_ms >= g->catch_ms && !g->miss_ms;
+}
+
+uint16_t bomb_aim_pos(const bomb_t *g) {
+    uint32_t u = g->aim_x1000 / 1000u;
+    return (uint16_t)(u < 1000 ? u : 2000 - u);
+}
+
+bomb_aim_t bomb_aim_now(const bomb_t *g) { return bomb_aim_params(bomb_heat(g), false, false); }
+
+// 扔出去(瞄准扔中,或者放招):把剩下的引信、招式、扔完的能量、回合过去多久带过去。
+static void send_throw(bomb_t *g, uint8_t skill, bool perfect) {
+    g->holding = false;
+    g->throws++;
+    uint8_t m[15] = { 'T' };
+    put32(m + 1, g->match);
+    m[5] = g->round;
+    put16(m + 6, g->throws);
+    put16(m + 8, (uint16_t)g->remain_ms);
+    m[10] = skill;
+    m[11] = g->en_me;
+    m[12] = perfect;
+    put16(m + 13, (uint16_t)(g->elapsed_ms > 0xFFFFu ? 0xFFFFu : g->elapsed_ms));
+    enqueue(g, m, sizeof(m));
+    event(g, BE_THROWN);
+}
+
+static bool aim_throw(bomb_t *g) {
+    bomb_aim_t a = bomb_aim_now(g);
+    uint16_t pos = bomb_aim_pos(g);
+    uint16_t off = pos > BOMB_AIM_MID ? pos - BOMB_AIM_MID : BOMB_AIM_MID - pos;
+    if (off > a.green_half) {  // 扔歪:撞墙弹回来
+        g->miss_ms = BOMB_MISS_MS;
+        event(g, BE_MISS);
         return true;
     }
+    bool perfect = off <= a.perfect_half;
+    if (perfect) {
+        g->en_me = add_en(g->en_me, BOMB_EN_PERFECT);
+        event(g, BE_PERFECT);
+    }
+    send_throw(g, SK_NONE, perfect);
+    return true;
+}
+
+bool bomb_press(bomb_t *g) { return bomb_key(g, BK_OK); }
+
+bool bomb_key(bomb_t *g, uint8_t key) {
+    if (key != BK_OK) return false;
+    if (bomb_can_throw(g)) return aim_throw(g);
     if (g->phase == BP_OVER && !g->me_again) {
         g->me_again = true;
         uint8_t m[5] = { 'R' };

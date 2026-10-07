@@ -30,5 +30,14 @@ void duo_begin(void);                 // init + 连上 + 选人(库巴 对 爸�
 void flow(void);
 void run(uint32_t ms);    // 两边各走 ms 毫秒(每步 10 ms,每步之后 flow)
 void mirror(void);        // 两边场号一样、比分镜像(assert)
+// 推时间(两边,或只推 g 自己)直到 g 能扔、箭头在 [lo, hi];5 秒内到不了就 assert
+void aim_at(bomb_t *g, uint16_t lo, uint16_t hi);
+void aim_solo(bomb_t *g, uint16_t lo, uint16_t hi);
+void throw_hit(bomb_t *g);      // 瞄准绿区(不在完美区)按 ●,断言扔出去了(不送达)
+void throw_perfect(bomb_t *g);  // 瞄准完美区按 ●
+#define HIT_LO 380
+#define HIT_HI 450
+#define PERFECT_LO 485
+#define PERFECT_HI 515
 bomb_t *holder(void);     // 拿着炸弹的那边(没人拿返回 NULL)
 bomb_t *other(bomb_t *g);

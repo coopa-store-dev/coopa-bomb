@@ -95,3 +95,34 @@ void mirror(void) {
 
 bomb_t *holder(void) { return D.a.holding ? &D.a : D.b.holding ? &D.b : NULL; }
 bomb_t *other(bomb_t *g) { return g == &D.a ? &D.b : &D.a; }
+
+static bool aimed(const bomb_t *g, uint16_t lo, uint16_t hi) {
+    uint16_t p = bomb_aim_pos(g);
+    return bomb_can_throw(g) && p >= lo && p <= hi;
+}
+
+void aim_at(bomb_t *g, uint16_t lo, uint16_t hi) {
+    for (int t = 0; !aimed(g, lo, hi); t += 10) {
+        assert(t < 5000);
+        bomb_tick(&D.a, 10);
+        bomb_tick(&D.b, 10);
+        flow();
+    }
+}
+
+void aim_solo(bomb_t *g, uint16_t lo, uint16_t hi) {
+    for (int t = 0; !aimed(g, lo, hi); t += 10) {
+        assert(t < 5000);
+        bomb_tick(g, 10);
+    }
+}
+
+void throw_hit(bomb_t *g) {
+    aim_at(g, HIT_LO, HIT_HI);
+    assert(bomb_press(g) && !g->holding);
+}
+
+void throw_perfect(bomb_t *g) {
+    aim_at(g, PERFECT_LO, PERFECT_HI);
+    assert(bomb_press(g) && !g->holding);
+}

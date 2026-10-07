@@ -27,14 +27,16 @@ static void test_start(void) {
 static void test_throw_and_catch(void) {
     start();
     bomb_t *h = holder(), *o = other(h);
+    aim_at(h, HIT_LO, HIT_HI);
     uint32_t left = h->remain_ms;
     assert(bomb_press(h));
     assert(!h->holding);
     flow();
     assert(o->holding && o->remain_ms == left && o->throws == 1);
-    assert(!bomb_press(o));  // 刚接到:0.5 秒内扔不回去
-    run(BOMB_CATCH_MS);
-    assert(bomb_press(o));
+    assert(!bomb_press(o) && !bomb_can_throw(o));  // 刚接到:0.5 秒内扔不回去
+    run(BOMB_CATCH_MS - 10);
+    assert(!bomb_can_throw(o));
+    throw_hit(o);
     flow();
     assert(h->holding && h->throws == 2);
 }
@@ -47,7 +49,7 @@ static void test_press_only_when_allowed(void) {  // Review Focus 3
     uint8_t before = o->out_n;
     assert(!bomb_press(o));                          // 没拿炸弹
     assert(o->out_n == before);                      // 也没发出任何东西
-    assert(bomb_press(h));
+    throw_hit(h);
     flow();
     assert(!bomb_press(h));                          // 扔出去了就没了
 }
@@ -96,7 +98,7 @@ static void test_match_to_three_and_again(void) {
 static void test_drop_mid_round(void) {
     start();
     bomb_t *h = holder();
-    assert(bomb_press(h));  // 扔出去了,但没送到
+    throw_hit(h);  // 扔出去了,但没送到
     duo_drop();
     assert(D.a.phase == BP_WAIT && D.b.phase == BP_WAIT && !holder());
     duo_connect();
@@ -203,6 +205,7 @@ static void test_garbage_ignored(void) {  // Review Focus 4
 // 这边还在倒数也要接住 / 记分,不然两边都不拿炸弹,这一回合永远卡住(真卡上碰到过)。
 static void lag_count(bomb_t *h) {
     for (uint32_t t = 0; t < BOMB_COUNT_MS + 20; t += 10) bomb_tick(h, 10);
+    assert(other(h)->phase == BP_COUNT);
     assert(h->phase == BP_PLAY && other(h)->phase == BP_COUNT);
 }
 
@@ -210,6 +213,7 @@ static void test_throw_while_peer_counting(void) {
     duo_begin();
     bomb_t *h = holder(), *o = other(h);
     lag_count(h);
+    aim_solo(h, HIT_LO, HIT_HI);
     uint32_t left = h->remain_ms;
     assert(bomb_press(h));
     flow();
