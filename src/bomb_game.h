@@ -3,11 +3,14 @@
 //
 // 消息(第一字节是类型,多字节小端):
 //   'H' HELLO  版本                                                              连上后双方各发一次
-//   'N' ROUND  场号(4) 回合 主动方比分 被连方比分 炸弹给谁 引信(2) 倒数(2)          主动方:开一回合(给谁 = 2:这场打完了)
+//   'S' SELECT 场号(4)                                                           主动方:进选人页(新的一场的场号)
+//   'P' PICK   场号(4) 角色(0xFF = 撤回)                                          选人页确定 / 撤回;连回来重发
+//   'N' ROUND  场号(4) 回合 主动方比分 被连方比分 炸弹给谁 引信(2) 倒数(2) 主动方角色 被连方角色
+//                                                                                主动方:开一回合(给谁 = 2:这场打完了)
 //   'T' THROW  场号(4) 回合 第几扔(2) 剩余毫秒(2)                                  扔的一方
 //   'B' BOOM   场号(4) 回合                                                       炸在手里的一方
 //   'R' AGAIN  场号(4)                                                            结束页按了 ●
-// 主动方说了算:开回合、比分(ROUND 里带着)。只有拿着炸弹的一方能扔、能判爆炸,所以不会两边同时拿着。
+// 主动方说了算:选人页的场号、什么时候开打、开回合、比分(ROUND 里带着)。角色一场之内锁定(开打后不收 PICK)。只有拿着炸弹的一方能扔、能判爆炸,所以不会两边同时拿着。
 // 断线:这一回合作废;连回来主动方重开(这一回合已经炸过就开下一回合)。
 #pragma once
 
@@ -15,7 +18,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define BOMB_PROTO 1
+#include "bomb_fighters.h"
+
+#define BOMB_PROTO 2
 #define BOMB_MSG_MAX 64
 #define BOMB_WIN 3
 #define BOMB_CATCH_MS 500
@@ -26,10 +31,16 @@
 #define BOMB_HOT_MS 20000  // 过去这么久就最红、最快(只看过去多久)
 #define BOMB_OUTQ 8
 #define BOMB_EVQ 8
+#define BOMB_EN_MAX 4
 #define BOMB_NOBODY 2      // ROUND 里「炸弹给谁」= 这场打完了
+#define BOMB_NOCHAR 0xFF   // 还没选人 / PICK 里的「撤回」
 
-typedef enum { BP_WAIT = 0, BP_COUNT, BP_PLAY, BP_BOOM, BP_OVER } bomb_phase_t;
-typedef enum { BE_ROUND = 1, BE_GOT, BE_THROWN, BE_BOOM_ME, BE_BOOM_PEER, BE_OVER, BE_BAD_VER } bomb_ev_t;
+typedef enum { BP_WAIT = 0, BP_COUNT, BP_PLAY, BP_BOOM, BP_OVER, BP_PICK } bomb_phase_t;  // 旧值不能改(状态行)
+typedef enum {
+    BE_ROUND = 1, BE_GOT, BE_THROWN, BE_BOOM_ME, BE_BOOM_PEER, BE_OVER, BE_BAD_VER,
+    BE_PICK,       // 进选人页
+    BE_PEER_PICK,  // 对方确定 / 撤回了
+} bomb_ev_t;
 
 typedef bool (*bomb_send_fn)(void *ctx, const void *msg, size_t len);  // false = 现在发不出去,过会儿再发
 typedef uint32_t (*bomb_rnd_fn)(void);
@@ -48,6 +59,10 @@ typedef struct {
     bool holding;          // 炸弹在我这
     bool loser_me;         // 最近一次炸在我手里
     bool me_again, peer_again;
+    bool selecting;        // 在选人(主动方断线重连时据此重发 SELECT)
+    uint8_t me_char, peer_char;  // bomb_fighter_t;BOMB_NOCHAR = 还没有
+    bool me_picked, peer_picked;
+    uint8_t en_me, en_peer;      // 能量 0..BOMB_EN_MAX
     uint16_t throws;       // 这一回合扔了几次
     uint32_t remain_ms;    // 我拿着时:引信还剩多少
     uint32_t elapsed_ms;   // 这一回合开始以后过去多久(画面、声音只看它)
@@ -65,6 +80,8 @@ void bomb_lost(bomb_t *g);                       // 断了:这一回合作废,�
 void bomb_on_msg(bomb_t *g, const uint8_t *m, size_t len);
 void bomb_tick(bomb_t *g, uint32_t dt_ms);
 bool bomb_press(bomb_t *g);                      // ●:扔 / 再来一场;返回 true = 做了
+bool bomb_pick(bomb_t *g, uint8_t fighter);      // 选人页确定;返回 true = 收下
+bool bomb_unpick(bomb_t *g);                     // 确定后撤回
 void bomb_pump(bomb_t *g);                       // 把排着的消息发出去
 bool bomb_event(bomb_t *g, uint8_t *ev);
 bool bomb_over(const bomb_t *g);                 // 有一方赢够了

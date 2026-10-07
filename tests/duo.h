@@ -25,6 +25,8 @@ bool duo_send(void *ctx, const void *m, size_t len);
 void duo_init(void);
 void duo_connect(void);
 void duo_drop(void);
+void duo_pick(uint8_t a, uint8_t b);  // 两边在选人页确定(a 是主动方)并送达
+void duo_begin(void);                 // init + 连上 + 选人(库巴 对 爸爸):两边进倒数
 void flow(void);
 void run(uint32_t ms);    // 两边各走 ms 毫秒(每步 10 ms,每步之后 flow)
 void mirror(void);        // 两边场号一样、比分镜像(assert)

@@ -13,10 +13,10 @@ all: $(addprefix $(OUT)/,$(TESTS))
 $(OUT):
 	mkdir -p $@
 
-$(OUT)/test_game: test_game.c duo.c ../src/bomb_game.c $(HDRS) | $(OUT)
+$(OUT)/test_game: test_game.c duo.c ../src/bomb_game.c ../src/bomb_fighters.c $(HDRS) | $(OUT)
 	$(CC) $(CFLAGS) $(filter %.c,$^) -o $@
 
-$(OUT)/test_match: test_match.c duo.c ../src/bomb_game.c $(HDRS) | $(OUT)
+$(OUT)/test_match: test_match.c duo.c ../src/bomb_game.c ../src/bomb_fighters.c $(HDRS) | $(OUT)
 	$(CC) $(CFLAGS) $(filter %.c,$^) -o $@
 
 $(OUT)/test_fighters: test_fighters.c ../src/bomb_fighters.c $(HDRS) | $(OUT)
@@ -28,7 +28,7 @@ $(OUT)/test_save: test_save.c ../src/bomb_save.c $(HDRS) | $(OUT)
 $(OUT)/test_sprites: test_sprites.c ../src/bomb_sprites.c stub_palette.c $(HDRS) | $(OUT)
 	$(CC) $(CFLAGS) -Istub $(filter %.c,$^) -o $@
 
-$(OUT)/test_peer_glue: test_peer_glue.c peer_glue.c duo.c ../src/bomb_game.c $(HDRS) | $(OUT)
+$(OUT)/test_peer_glue: test_peer_glue.c peer_glue.c duo.c ../src/bomb_game.c ../src/bomb_fighters.c $(HDRS) | $(OUT)
 	$(CC) $(CFLAGS) $(filter %.c,$^) -o $@
 
 .PHONY: all

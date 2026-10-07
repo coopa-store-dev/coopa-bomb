@@ -45,6 +45,20 @@ void duo_drop(void) {
     bomb_lost(&D.b);
 }
 
+void duo_pick(uint8_t a, uint8_t b) {
+    assert(bomb_pick(&D.a, a));
+    assert(bomb_pick(&D.b, b));
+    flow();
+}
+
+void duo_begin(void) {
+    duo_init();
+    duo_connect();
+    flow();
+    duo_pick(0, 1);
+    assert(D.a.phase == BP_COUNT && D.b.phase == BP_COUNT);
+}
+
 static bool deliver(pipe_t *p, bomb_t *to) {
     if (!p->n) return false;
     uint8_t m[BOMB_MSG_MAX];

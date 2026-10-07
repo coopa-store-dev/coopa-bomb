@@ -18,6 +18,7 @@ int main(void) {
         duo_init();
         duo_connect();
         flow();
+        duo_pick((uint8_t)(match % BF_COUNT), (uint8_t)(match / BF_COUNT % BF_COUNT));
         if (D.a.holding) first_a++;
         int64_t wait[2] = { -1, -1 };  // 拿到炸弹后打算等多久再扔(-1 = 还没拿到)
         for (int step = 0; step < 100000 && !(D.a.phase == BP_OVER && D.b.phase == BP_OVER); step++) {

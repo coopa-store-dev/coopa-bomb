@@ -56,7 +56,7 @@ static void begin(bomb_t *g, uint8_t round, bool mine, uint16_t fuse, uint16_t d
 }
 
 static void send_round(bomb_t *g, uint8_t holder, uint16_t fuse, uint16_t delay) {
-    uint8_t m[13] = { 'N' };
+    uint8_t m[15] = { 'N' };
     put32(m + 1, g->match);
     m[5] = g->round;
     m[6] = g->score_me;    // 主动方比分
@@ -64,6 +64,8 @@ static void send_round(bomb_t *g, uint8_t holder, uint16_t fuse, uint16_t delay)
     m[8] = holder;         // 0 主动方 / 1 被连方 / 2 这场打完了
     put16(m + 9, fuse);
     put16(m + 11, delay);
+    m[13] = g->me_char;    // 主动方角色
+    m[14] = g->peer_char;  // 被连方角色
     enqueue(g, m, sizeof(m));
 }
 
@@ -77,17 +79,69 @@ static void start_round(bomb_t *g, uint8_t round, uint16_t delay) {
     begin(g, round, holder == 0, fuse, delay);
 }
 
+// 新的一场(场号已经在选人页定好):比分、能量清零,角色锁定。
 static void new_match(bomb_t *g) {
-    g->match = g->rnd() | 1u;
+    g->selecting = false;
     g->score_me = g->score_peer = 0;
+    g->en_me = g->en_peer = 0;
     g->me_again = g->peer_again = false;
     start_round(g, 1, BOMB_COUNT_MS);
+}
+
+static void send_select(bomb_t *g) {
+    uint8_t m[5] = { 'S' };
+    put32(m + 1, g->match);
+    enqueue(g, m, sizeof(m));
+}
+
+static void send_pick(bomb_t *g) {
+    uint8_t m[6] = { 'P' };
+    put32(m + 1, g->match);
+    m[5] = g->me_picked ? g->me_char : BOMB_NOCHAR;
+    enqueue(g, m, sizeof(m));
+}
+
+// 换了一场(新场号):比分、能量、选人都从头来。
+static void reset_match(bomb_t *g, uint32_t match) {
+    g->match = match;
+    g->score_me = g->score_peer = 0;
+    g->en_me = g->en_peer = 0;
+    g->round = 0;
+    g->decided = false;
+    g->me_picked = g->peer_picked = false;
+    g->peer_char = BOMB_NOCHAR;
+    g->me_again = g->peer_again = false;
+}
+
+static void to_pick(bomb_t *g) {
+    g->selecting = true;
+    g->holding = false;
+    g->phase = BP_PICK;
+    event(g, BE_PICK);
+}
+
+// 主动方:定下一场的场号,进选人页。
+static void enter_select(bomb_t *g) {
+    uint32_t old = g->match, m;
+    do m = g->rnd() | 1u;
+    while (m == old);
+    reset_match(g, m);
+    to_pick(g);
+    send_select(g);
+}
+
+static void maybe_start(bomb_t *g) {
+    if (g->initiator && g->phase == BP_PICK && g->me_picked && g->peer_picked) new_match(g);
 }
 
 // 主动方:对方连上来了。没开过就开新的一场;打完了就告诉对方结果;否则重开这一回合(炸过了就开下一回合)。
 static void resume(bomb_t *g) {
     if (!g->match) {
-        new_match(g);
+        enter_select(g);
+    } else if (g->selecting) {  // 选人选到一半断的:同一个场号接着选
+        to_pick(g);
+        send_select(g);
+        if (g->me_picked) send_pick(g);
     } else if (bomb_over(g)) {
         send_round(g, BOMB_NOBODY, 0, 0);
         finish(g);
@@ -97,7 +151,7 @@ static void resume(bomb_t *g) {
 }
 
 static void maybe_again(bomb_t *g) {
-    if (g->initiator && g->phase == BP_OVER && g->me_again && g->peer_again) new_match(g);
+    if (g->initiator && g->phase == BP_OVER && g->me_again && g->peer_again) enter_select(g);
 }
 
 static void on_hello(bomb_t *g, const uint8_t *m, size_t len) {
@@ -110,16 +164,39 @@ static void on_hello(bomb_t *g, const uint8_t *m, size_t len) {
     if (g->initiator) resume(g);
 }
 
+static void on_select(bomb_t *g, const uint8_t *m, size_t len) {
+    if (len < 5 || g->initiator) return;
+    uint32_t match = get32(m + 1);
+    if (!match) return;
+    if (match != g->match) reset_match(g, match);
+    to_pick(g);
+    if (g->me_picked) send_pick(g);  // 同一场断线重连:再告诉一次
+}
+
+static void on_pick(bomb_t *g, const uint8_t *m, size_t len) {
+    if (len < 6 || g->phase != BP_PICK || get32(m + 1) != g->match) return;
+    uint8_t f = m[5];
+    if (f >= BF_COUNT && f != BOMB_NOCHAR) return;
+    g->peer_char = f;
+    g->peer_picked = f != BOMB_NOCHAR;
+    event(g, BE_PEER_PICK);
+    maybe_start(g);
+}
+
 static void on_round(bomb_t *g, const uint8_t *m, size_t len) {
-    if (len < 13 || g->initiator) return;
+    if (len < 15 || g->initiator) return;
     uint8_t holder = m[8];
     uint16_t fuse = get16(m + 9), delay = get16(m + 11);
     if (holder > BOMB_NOBODY || m[6] > BOMB_WIN || m[7] > BOMB_WIN || delay > BOMB_COUNT_MS || !m[5]) return;
     if (holder != BOMB_NOBODY && (fuse < BOMB_FUSE_MIN || fuse > BOMB_FUSE_MAX)) return;
+    if (m[13] >= BF_COUNT || m[14] >= BF_COUNT) return;
     uint32_t match = get32(m + 1);
     if (!match) return;
-    if (match != g->match) g->me_again = g->peer_again = false;
-    g->match = match;
+    if (match != g->match) reset_match(g, match);
+    g->selecting = false;
+    g->peer_char = m[13];
+    g->me_char = m[14];
+    g->me_picked = g->peer_picked = true;
     g->score_me = m[7];
     g->score_peer = m[6];
     g->round = m[5];
@@ -172,6 +249,7 @@ void bomb_init(bomb_t *g, bomb_send_fn send, void *ctx, bomb_rnd_fn rnd) {
     g->send = send;
     g->ctx = ctx;
     g->rnd = rnd;
+    g->me_char = g->peer_char = BOMB_NOCHAR;
 }
 
 static void clear_link(bomb_t *g) {
@@ -196,6 +274,8 @@ void bomb_on_msg(bomb_t *g, const uint8_t *m, size_t len) {
     if (!len) return;
     switch (m[0]) {
         case 'H': on_hello(g, m, len); break;
+        case 'S': on_select(g, m, len); break;
+        case 'P': on_pick(g, m, len); break;
         case 'N': on_round(g, m, len); break;
         case 'T': on_throw(g, m, len); break;
         case 'B': on_boom(g, m, len); break;
@@ -278,6 +358,22 @@ bool bomb_press(bomb_t *g) {
         return true;
     }
     return false;
+}
+
+bool bomb_pick(bomb_t *g, uint8_t fighter) {
+    if (g->phase != BP_PICK || g->me_picked || fighter >= BF_COUNT) return false;
+    g->me_char = fighter;
+    g->me_picked = true;
+    send_pick(g);
+    maybe_start(g);
+    return true;
+}
+
+bool bomb_unpick(bomb_t *g) {
+    if (g->phase != BP_PICK || !g->me_picked) return false;
+    g->me_picked = false;
+    send_pick(g);
+    return true;
 }
 
 void bomb_pump(bomb_t *g) {

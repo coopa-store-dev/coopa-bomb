@@ -1,5 +1,5 @@
 // tests/peer_glue.c —— Mac 冒充对手(外壳的 tools/link_peer.py bomb)用的 C 接口:一个 bomb_t。
-// Mac 永远是主动连的一方;时间由 Python 推(peer_tick)。发出去的消息先进这里的队列,由 Python 取走。
+// Mac 永远是主动连的一方;时间由 Python 推(peer_tick)。到了选人页自己随便选一个人。发出去的消息先进这里的队列,由 Python 取走。
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -40,7 +40,10 @@ void peer_connected(void) {
 
 void peer_lost(void) { bomb_lost(&s_g); }
 void peer_msg(const uint8_t *m, size_t len) { bomb_on_msg(&s_g, m, len); }
-void peer_tick(uint32_t dt) { bomb_tick(&s_g, dt); }
+void peer_tick(uint32_t dt) {
+    if (s_g.phase == BP_PICK && !s_g.me_picked) bomb_pick(&s_g, (uint8_t)(rnd() % BF_COUNT));
+    bomb_tick(&s_g, dt);
+}
 int peer_press(void) { return bomb_press(&s_g); }
 int peer_holding(void) { return s_g.holding && s_g.hold_ms >= BOMB_CATCH_MS; }
 int peer_over(void) { return s_g.phase == BP_OVER; }

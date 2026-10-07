@@ -7,17 +7,13 @@
 #include <string.h>
 
 static void start(void) {
-    duo_init();
-    duo_connect();
-    flow();
+    duo_begin();
     run(BOMB_COUNT_MS + 20);
     assert(D.a.phase == BP_PLAY && D.b.phase == BP_PLAY);
 }
 
 static void test_start(void) {
-    duo_init();
-    duo_connect();
-    flow();
+    duo_begin();
     assert(D.a.phase == BP_COUNT && D.b.phase == BP_COUNT);
     assert(D.a.match && D.a.match == D.b.match && D.a.round == 1 && D.b.round == 1);
     assert(D.a.holding != D.b.holding);
@@ -44,9 +40,7 @@ static void test_throw_and_catch(void) {
 }
 
 static void test_press_only_when_allowed(void) {  // Review Focus 3
-    duo_init();
-    duo_connect();
-    flow();
+    duo_begin();
     assert(!bomb_press(&D.a) && !bomb_press(&D.b));  // 倒数时
     run(BOMB_COUNT_MS + 20);
     bomb_t *h = holder(), *o = other(h);
@@ -87,10 +81,16 @@ static void test_match_to_three_and_again(void) {
     assert(bomb_press(&D.b));
     flow();
     assert(D.a.phase == BP_OVER);  // a 还没按
+    D.a.en_me = D.b.en_peer = 3;
     assert(bomb_press(&D.a));
     flow();
-    assert(D.a.match != old && D.a.match == D.b.match && D.a.round == 1);
-    assert(D.a.score_me == 0 && D.a.score_peer == 0 && D.b.phase == BP_COUNT);
+    // 两边都按了:回选人页,新的场号,比分、能量清零;再选一次才开打
+    assert(D.a.phase == BP_PICK && D.b.phase == BP_PICK);
+    assert(D.a.match != old && D.a.match == D.b.match);
+    assert(D.a.score_me == 0 && D.a.score_peer == 0 && D.b.score_me == 0 && D.a.en_me == 0 && D.b.en_peer == 0);
+    assert(!D.a.me_picked && !D.b.me_picked && !D.a.peer_picked);
+    duo_pick(2, 3);
+    assert(D.a.round == 1 && D.b.phase == BP_COUNT && D.a.me_char == 2 && D.b.peer_char == 2 && D.a.peer_char == 3);
 }
 
 static void test_drop_mid_round(void) {
@@ -147,6 +147,7 @@ static void test_initiator_restart_new_match(void) {
     duo_connect();
     flow();
     assert(D.a.match != old && D.b.match == D.a.match && D.b.score_me == 0 && D.b.score_peer == 0);
+    assert(D.a.phase == BP_PICK && D.b.phase == BP_PICK && !D.b.me_picked);  // 新的一场:重新选人
 }
 
 static void test_over_survives_reconnect(void) {
@@ -173,7 +174,7 @@ static void test_version_mismatch(void) {
 
 static void test_garbage_ignored(void) {  // Review Focus 4
     start();
-    static const uint8_t TYPES[] = { 'H', 'N', 'T', 'B', 'R', 0, 0xFF };
+    static const uint8_t TYPES[] = { 'H', 'S', 'P', 'N', 'T', 'B', 'R', 0, 0xFF };
     uint8_t m[BOMB_MSG_MAX];
     uint32_t x = 9;
     for (size_t t = 0; t < sizeof(TYPES); t++) {
@@ -185,7 +186,9 @@ static void test_garbage_ignored(void) {  // Review Focus 4
                 }
                 m[0] = TYPES[t];
                 bomb_on_msg(&D.b, m, len);
-                assert(D.b.score_me <= BOMB_WIN && D.b.score_peer <= BOMB_WIN && D.b.phase <= BP_OVER);
+                assert(D.b.score_me <= BOMB_WIN && D.b.score_peer <= BOMB_WIN && D.b.phase <= BP_PICK);
+                assert((D.b.me_char < BF_COUNT || D.b.me_char == BOMB_NOCHAR) && (D.b.peer_char < BF_COUNT || D.b.peer_char == BOMB_NOCHAR));
+                assert(D.b.en_me <= BOMB_EN_MAX && D.b.en_peer <= BOMB_EN_MAX);
                 assert(!D.b.holding || D.b.remain_ms <= BOMB_FUSE_MAX);
             }
         }
@@ -204,9 +207,7 @@ static void lag_count(bomb_t *h) {
 }
 
 static void test_throw_while_peer_counting(void) {
-    duo_init();
-    duo_connect();
-    flow();
+    duo_begin();
     bomb_t *h = holder(), *o = other(h);
     lag_count(h);
     uint32_t left = h->remain_ms;
@@ -216,9 +217,7 @@ static void test_throw_while_peer_counting(void) {
 }
 
 static void test_boom_while_peer_counting(void) {
-    duo_init();
-    duo_connect();
-    flow();
+    duo_begin();
     bomb_t *h = holder(), *o = other(h);
     lag_count(h);
     while (h->phase == BP_PLAY) bomb_tick(h, 10);
@@ -285,6 +284,84 @@ static void test_heat_only_elapsed(void) {
     assert(bomb_heat(&g) == 255 && bomb_tick_gap(&g) >= 120);
 }
 
+
+static void test_pick_flow(void) {
+    duo_init();
+    duo_connect();
+    flow();
+    assert(D.a.phase == BP_PICK && D.b.phase == BP_PICK);
+    assert(D.a.match && D.a.match == D.b.match);
+    assert(!bomb_pick(&D.a, BF_COUNT) && !bomb_pick(&D.a, BOMB_NOCHAR));
+    assert(bomb_pick(&D.a, BF_GRANNY));
+    flow();
+    assert(D.a.phase == BP_PICK && D.b.peer_picked && D.b.peer_char == BF_GRANNY);  // 只一边选了:不开
+    assert(bomb_pick(&D.b, BF_GRANNY));                                            // 可以选同一个人
+    flow();
+    assert(D.a.phase == BP_COUNT && D.b.phase == BP_COUNT);
+    assert(D.a.me_char == BF_GRANNY && D.a.peer_char == BF_GRANNY && D.b.me_char == BF_GRANNY);
+    assert(!bomb_pick(&D.a, BF_KID));  // 开打了不能再选
+}
+
+static void test_unpick(void) {
+    duo_init();
+    duo_connect();
+    flow();
+    assert(!bomb_unpick(&D.b));
+    assert(bomb_pick(&D.b, BF_KID));
+    flow();
+    assert(D.a.peer_picked);
+    assert(bomb_unpick(&D.b));
+    flow();
+    assert(!D.a.peer_picked && D.a.peer_char == BOMB_NOCHAR);
+    assert(bomb_pick(&D.a, BF_DAD));
+    flow();
+    assert(D.a.phase == BP_PICK);  // 对方撤回了:不开
+    assert(bomb_pick(&D.b, BF_GRANDPA));
+    flow();
+    assert(D.a.phase == BP_COUNT && D.a.peer_char == BF_GRANDPA);
+}
+
+static void test_pick_survives_drop(void) {
+    duo_init();
+    duo_connect();
+    flow();
+    uint32_t m = D.a.match;
+    assert(bomb_pick(&D.a, BF_DAD) && bomb_pick(&D.b, BF_KID));  // 都按了,但消息没送到
+    duo_drop();
+    assert(D.a.phase == BP_WAIT && D.b.phase == BP_WAIT);
+    duo_connect();
+    flow();
+    // 连回来:同一个场号,两边重发自己的选择,直接开打
+    assert(D.a.match == m && D.b.match == m && D.a.phase == BP_COUNT && D.b.phase == BP_COUNT);
+    assert(D.a.peer_char == BF_KID && D.b.peer_char == BF_DAD);
+}
+
+static void test_stale_pick_ignored(void) {  // 比赛中、或者场号不对的 PICK 不换人
+    start();
+    uint8_t m[6] = { 'P' };
+    for (int i = 0; i < 4; i++) m[1 + i] = (uint8_t)(D.b.match >> (8 * i));
+    m[5] = BF_GRANDPA;
+    bomb_on_msg(&D.b, m, sizeof(m));
+    assert(D.b.peer_char == BF_KID && D.b.phase == BP_PLAY);
+}
+
+static void test_responder_restart_gets_chars(void) {  // 被连方重启丢了角色:ROUND 里带着
+    start();
+    duo_drop();
+    bomb_init(&D.b, duo_send, &D.ba, duo_rnd);
+    duo_connect();
+    flow();
+    assert(D.b.phase == BP_COUNT && D.b.me_char == BF_DAD && D.b.peer_char == BF_KID);
+}
+
+static void test_old_version(void) {
+    duo_init();
+    duo_connect();
+    uint8_t h[2] = { 'H', 1 };
+    bomb_on_msg(&D.b, h, sizeof(h));
+    assert(D.b.bad_ver);
+}
+
 int main(void) {
     test_responder_never_ends_match_alone();
     test_match_point_ends_once();
@@ -303,6 +380,12 @@ int main(void) {
     test_version_mismatch();
     test_garbage_ignored();
     test_heat_only_elapsed();
+    test_pick_flow();
+    test_unpick();
+    test_pick_survives_drop();
+    test_stale_pick_ignored();
+    test_responder_restart_gets_chars();
+    test_old_version();
     puts("test_game: ok");
     return 0;
 }

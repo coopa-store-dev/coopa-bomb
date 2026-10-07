@@ -24,6 +24,7 @@ int main(void) {
     for (int step = 0; step < 200000 && !(peer_over() && D.b.phase == BP_OVER); step++) {
         peer_tick(10);
         bomb_tick(&D.b, 10);
+        if (D.b.phase == BP_PICK && !D.b.me_picked) bomb_pick(&D.b, BF_GRANDPA);
         if (peer_holding() && step % 97 == 0) peer_press();
         if (D.b.holding && D.b.hold_ms >= 900) bomb_press(&D.b);
         uint8_t m[BOMB_MSG_MAX];
