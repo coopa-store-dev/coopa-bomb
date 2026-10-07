@@ -1,6 +1,6 @@
 id = "bomb"
 name = "库巴传炸弹"
-version = "1.0.0"
+version = "2.0.0"
 sdk = 4
 kit_api = 2
 app = "bomb_app"

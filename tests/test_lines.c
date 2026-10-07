@@ -17,7 +17,7 @@ static void check(const kit_line_t *l) {
 }
 
 int main(void) {
-    const kit_line_t *sets[4] = { BL_PICK, BL_SPECIAL, BL_SUPER, BL_WIN };
+    const kit_line_t *sets[4] = { bomb_line_pick, bomb_line_special, bomb_line_super, bomb_line_win };
     for (int k = 0; k < 4; k++)
         for (int f = 0; f < 4; f++) check(&sets[k][f]);
     puts("test_lines: ok");

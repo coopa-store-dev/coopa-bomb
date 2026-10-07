@@ -11142,25 +11142,25 @@ static const uint8_t L_WIN_GRANDPA[] = {
     0x88, 0x20, 0x33, 0x24, 0x30, 0x88, 0xd2, 0xac, 0xa9, 0x9c, 0x49, 0x24, 0x30,
 };
 
-const kit_line_t BL_PICK[4] = {
+const kit_line_t bomb_line_pick[4] = {
     { L_PICK_KID, 12942, "PICK_KID" },
     { L_PICK_DAD, 14185, "PICK_DAD" },
     { L_PICK_GRANNY, 19387, "PICK_GRANNY" },
     { L_PICK_GRANDPA, 19226, "PICK_GRANDPA" },
 };
-const kit_line_t BL_SPECIAL[4] = {
+const kit_line_t bomb_line_special[4] = {
     { L_SPECIAL_KID, 18405, "SPECIAL_KID" },
     { L_SPECIAL_DAD, 30710, "SPECIAL_DAD" },
     { L_SPECIAL_GRANNY, 21485, "SPECIAL_GRANNY" },
     { L_SPECIAL_GRANDPA, 39555, "SPECIAL_GRANDPA" },
 };
-const kit_line_t BL_SUPER[4] = {
+const kit_line_t bomb_line_super[4] = {
     { L_SUPER_KID, 17492, "SUPER_KID" },
     { L_SUPER_DAD, 31092, "SUPER_DAD" },
     { L_SUPER_GRANNY, 14609, "SUPER_GRANNY" },
     { L_SUPER_GRANDPA, 33246, "SUPER_GRANDPA" },
 };
-const kit_line_t BL_WIN[4] = {
+const kit_line_t bomb_line_win[4] = {
     { L_WIN_KID, 23798, "WIN_KID" },
     { L_WIN_DAD, 24097, "WIN_DAD" },
     { L_WIN_GRANNY, 12257, "WIN_GRANNY" },

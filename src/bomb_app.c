@@ -150,7 +150,7 @@ static void make_order(uint8_t me) {
 
 static void pick(uint8_t f) {
     if (!bomb_pick(G, f)) return;
-    voice(&BL_PICK[f], SFX_NONE);
+    voice(&bomb_line_pick[f], SFX_NONE);
     if (bomb_save_pick(&s_save) != f) {
         bomb_save_set_pick(&s_save, f);
         store();
@@ -164,7 +164,7 @@ static void start_cut(uint8_t sk, uint8_t ch) {
     s_cut_ms = 0;
     s_cut_char = ch < BF_COUNT ? ch : 0;
     s_cut_name = SKILL[sk];
-    voice(super ? &BL_SUPER[s_cut_char] : &BL_SPECIAL[s_cut_char], super ? SFX_CHAIN : SFX_NONE);
+    voice(super ? &bomb_line_super[s_cut_char] : &bomb_line_special[s_cut_char], super ? SFX_CHAIN : SFX_NONE);
 }
 
 static void on_event(uint8_t ev) {
@@ -202,7 +202,7 @@ static void on_event(uint8_t ev) {
         case BE_OVER: {
             bool won = G->score_me >= BOMB_WIN;
             uint8_t w = won ? G->me_char : G->peer_char;
-            voice(&BL_WIN[w < BF_COUNT ? w : 0], SFX_GAME_OVER);
+            voice(&bomb_line_win[w < BF_COUNT ? w : 0], SFX_GAME_OVER);
             s_over_ms = OVER_DEAF_MS;
             bool dirty = bomb_save_over(&s_save, G->match, won);
             if (s_mode == MODE_CPU && won && s_stage == STAGES) {

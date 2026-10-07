@@ -22,4 +22,4 @@
 
 #include "kit_lines.h"
 
-extern const kit_line_t BL_PICK[4], BL_SPECIAL[4], BL_SUPER[4], BL_WIN[4];
+extern const kit_line_t bomb_line_pick[4], bomb_line_special[4], bomb_line_super[4], bomb_line_win[4];

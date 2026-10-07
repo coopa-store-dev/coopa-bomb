@@ -33,7 +33,7 @@ DAD = ("zh-CN-YunjianNeural", "+0Hz", "+5%")
 KID = ("zh-CN-YunxiaNeural", "+0Hz", "+5%")               # 小男孩
 
 FIGHTERS = [("KID", KID), ("DAD", DAD), ("GRANNY", GRANNY), ("GRANDPA", GRANDPA)]  # 顺序 = bomb_fighter_t
-KINDS = ["PICK", "SPECIAL", "SUPER", "WIN"]  # 顺序 = 数组名 BL_PICK / BL_SPECIAL / BL_SUPER / BL_WIN
+KINDS = ["PICK", "SPECIAL", "SUPER", "WIN"]  # 数组名 bomb_line_pick / _special / _super / _win(全局名要以 bomb_ 开头)
 TEXT = {
     "KID": ["库巴来啦！", "弹弓，发射！", "影分身之术！", "耶！我赢啦！"],
     "DAD": ["放马过来吧！", "火箭快递，使命必达！", "铁笼！给我关起来！", "谁也别想赢过我！"],
@@ -130,7 +130,7 @@ def main() -> int:
          "// 格式同 Coopa OS 内置台词(16 kHz IMA ADPCM),用 sfx_play_line 播放。台词:", ""]
     h += [f"// {name}: {text}" for name, text, _, _ in lines]
     h += ["", "#pragma once", "", '#include "kit_lines.h"', "",
-          "extern const kit_line_t BL_PICK[4], BL_SPECIAL[4], BL_SUPER[4], BL_WIN[4];", ""]
+          "extern const kit_line_t bomb_line_pick[4], bomb_line_special[4], bomb_line_super[4], bomb_line_win[4];", ""]
     H.write_text("\n".join(h))
     c = ["// src/bomb_lines.c —— tools/gen_lines.py 生成,勿手改。", '#include "bomb_lines.h"', ""]
     for name, _, data, _ in lines:
@@ -142,7 +142,7 @@ def main() -> int:
     for kind in KINDS:
         items = [f'{{ L_{kind}_{f}, {n}, "{kind}_{f}" }}' for f, _ in FIGHTERS
                  for name, _, _, n in lines if name == f"{kind}_{f}"]
-        c.append(f"const kit_line_t BL_{kind}[4] = {{")
+        c.append(f"const kit_line_t bomb_line_{kind.lower()}[4] = {{")
         c += [f"    {it}," for it in items]
         c.append("};")
     c.append("")
