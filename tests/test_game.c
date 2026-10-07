@@ -340,6 +340,23 @@ static void test_pick_survives_drop(void) {
     assert(D.a.peer_char == BF_KID && D.b.peer_char == BF_DAD);
 }
 
+static void test_peer_swapped_while_picking(void) {  // 选人页断线,对方重启(或换了张卡):不能沿用它上次的选择
+    duo_init();
+    duo_connect();
+    flow();
+    assert(bomb_pick(&D.b, BF_DAD));
+    flow();
+    assert(D.a.peer_picked);
+    duo_drop();
+    bomb_init(&D.b, duo_send, &D.ba, duo_rnd);
+    duo_connect();
+    flow();
+    assert(D.a.phase == BP_PICK && !D.a.peer_picked && D.a.peer_char == BOMB_NOCHAR);
+    assert(bomb_pick(&D.a, BF_KID));
+    flow();
+    assert(D.a.phase == BP_PICK);  // 对方还没选:不开打
+}
+
 static void test_stale_pick_ignored(void) {  // 比赛中、或者场号不对的 PICK 不换人
     start();
     uint8_t m[6] = { 'P' };
@@ -387,6 +404,7 @@ int main(void) {
     test_pick_flow();
     test_unpick();
     test_pick_survives_drop();
+    test_peer_swapped_while_picking();
     test_stale_pick_ignored();
     test_responder_restart_gets_chars();
     test_old_version();

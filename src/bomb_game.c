@@ -156,7 +156,9 @@ static void maybe_start(bomb_t *g) {
 static void resume(bomb_t *g) {
     if (!g->match) {
         enter_select(g);
-    } else if (g->selecting) {  // 选人选到一半断的:同一个场号接着选
+    } else if (g->selecting) {  // 选人选到一半断的:同一个场号接着选;对方可能换了人(重启 / 换卡),等它重发
+        g->peer_picked = false;
+        g->peer_char = BOMB_NOCHAR;
         to_pick(g);
         send_select(g);
         if (g->me_picked) send_pick(g);
@@ -462,6 +464,7 @@ static bool cast(bomb_t *g, bool super) {
     g->skill_out = sk;
     event(g, BE_SKILL_OUT);
     send_throw(g, sk, false);
+    if (bomb_skill_hits(sk)) g->en_peer = add_en(g->en_peer, 1);  // 对方被打中 +1,两边记得一样
     if (sk == SK_LID) g->lid = true;
     if (sk == SK_GLASSES) g->glasses_left = BOMB_GLASSES;  // 扔完才戴上:这一扔不算
     return true;

@@ -98,6 +98,7 @@ def main():
             c.key("D")
             c.key("O")
         wait(lambda: x.stat()["phase"] == BP_PICK and y.stat()["phase"] == BP_PICK, 60, "两边进选人页")
+        time.sleep(0.6)  # 刚进选人页 0.4 秒不收键
         x.key("O")  # 库巴(光标默认在上次的人:新存档是库巴)
         for _ in range(3):
             y.key("D")  # 爷爷

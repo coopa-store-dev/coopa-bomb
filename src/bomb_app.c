@@ -30,6 +30,7 @@
 #define SAY_MS 600        // 「完美!」「扔歪了!」「锅盖神功!」这类大字闪多久
 #define OVER_DEAF_MS 1000 // 结束页前 1 秒不收键(狂按的那一下别把人带回首页)
 #define STAGES 3
+#define PICK_DEAF_MS 400  // 刚进选人页不收 ●(结束页连按的第二下别直接选了人)
 
 typedef enum { PG_TITLE = 0, PG_LINK, PG_GAME } page_t;
 typedef enum { MODE_LINK = 0, MODE_CPU } play_mode_t;
@@ -59,10 +60,11 @@ static uint8_t s_game_me = 0xFF, s_game_peer = 0xFF;  // 游戏页按哪两个�
 static uint32_t s_session;
 static bool s_up;
 static char s_note[192];
-static uint32_t s_fly, s_flash, s_tick, s_clock, s_say_ms, s_quiet, s_over_ms;
+static uint32_t s_fly, s_flash, s_tick, s_clock, s_say_ms, s_quiet, s_over_ms, s_pick_deaf;
 static const char *s_say;
 static uint32_t s_say_color;
 static uint8_t s_cut, s_cut_char;
+static bool s_cut_mine;        // 这段特写是我放的招(炸弹回到我手里就收起)
 static const char *s_cut_name;
 static uint32_t s_cut_ms;
 static bomb_view_t s_view;
@@ -158,8 +160,9 @@ static void pick(uint8_t f) {
     if (s_mode == MODE_CPU && s_stage == 1 && !s_auto) make_order(f);
 }
 
-static void start_cut(uint8_t sk, uint8_t ch) {
+static void start_cut(uint8_t sk, uint8_t ch, bool mine) {
     bool super = bomb_skill_super(sk);
+    s_cut_mine = mine;
     s_cut = super ? CUT_SUPER : CUT_SPECIAL;
     s_cut_ms = 0;
     s_cut_char = ch < BF_COUNT ? ch : 0;
@@ -169,14 +172,23 @@ static void start_cut(uint8_t sk, uint8_t ch) {
 
 static void on_event(uint8_t ev) {
     switch (ev) {
-        case BE_ROUND: sfx_play(SFX_START); s_tick = 0; break;
+        case BE_ROUND:
+            if (!s_quiet) sfx_play(SFX_START);  // 「开始」会切断刚喊的选人语音
+            s_tick = 0;
+            break;
+        case BE_GOT:  // 我放的招的特写还没放完,炸弹已经被推 / 崩回来了:收起来,别挡住瞄准
+            if (s_cut != CUT_NONE && s_cut_mine) s_cut = CUT_NONE;
+            break;
         case BE_THROWN:
             s_fly = FLY_MS;
             if (s_cut == CUT_NONE) sfx_play(SFX_WHOOSH);
             break;
-        case BE_MISS: sfx_play(SFX_BEAT); say(BX_MISS, UK_GRAY); break;
+        case BE_MISS:
+            if (!s_quiet) sfx_play(SFX_BEAT);  // 「咚」会切断对方的招式语音,说话时只闪字
+            say(BX_MISS, UK_GRAY);
+            break;
         case BE_PERFECT: sfx_play(SFX_PERFECT); say(BX_PERFECT, UK_GOLD); break;
-        case BE_SKILL_OUT: start_cut(G->skill_out, G->me_char); break;
+        case BE_SKILL_OUT: start_cut(G->skill_out, G->me_char, true); break;
         case BE_SKILL_IN:
             if (G->skill_in == SK_LID_BOUNCE) {
                 sfx_play(SFX_HIT);
@@ -185,13 +197,15 @@ static void on_event(uint8_t ev) {
                 sfx_play(SFX_HIT);
                 say(BX_SK_TAIJI_BIG, UK_RED);
             } else {
-                start_cut(G->skill_in, G->peer_char);
+                start_cut(G->skill_in, G->peer_char, false);
             }
             break;
         case BE_LID: sfx_play(SFX_HIT); say(BX_SK_LID_BIG, UK_GREEN); break;
         case BE_TAIJI: sfx_play(SFX_HIT); say(BX_SK_TAIJI_BIG, UK_GREEN); break;
         case BE_CAGE_HIT: sfx_play(SFX_TAP); break;
-        case BE_CAGE_OPEN: sfx_play(SFX_HIT); break;
+        case BE_CAGE_OPEN:
+            if (!s_quiet) sfx_play(SFX_HIT);
+            break;
         case BE_DECOY_PUFF: sfx_play(SFX_FEINT); break;
         case BE_BOOM_ME:
         case BE_BOOM_PEER:
@@ -212,7 +226,10 @@ static void on_event(uint8_t ev) {
             if (dirty) store();
             break;
         }
-        case BE_PICK: s_cursor = bomb_save_pick(&s_save); break;
+        case BE_PICK:
+            s_cursor = bomb_save_pick(&s_save);
+            s_pick_deaf = PICK_DEAF_MS;
+            break;
         default: break;
     }
 }
@@ -239,7 +256,7 @@ static void cpu_again(void) {
         s_stage = 1;
         s_cleared = s_auto = false;
     } else {
-        if (G->score_me >= BOMB_WIN) s_stage++;
+        if (G->score_me >= BOMB_WIN && s_stage < STAGES) s_stage++;
         s_auto = true;
     }
     bomb_press(&s_loc.me);
@@ -267,6 +284,7 @@ static bool bomb_input(const kit_input_t *in) {
         return false;
     }
     if (G->phase == BP_PICK) {
+        if (s_pick_deaf) return false;
         if (G->me_picked) {
             if (in->key == KIT_KEY_DOWN) bomb_unpick(G);
         } else if (in->key == KIT_KEY_OK) {
@@ -484,6 +502,7 @@ static void bomb_frame(uint32_t dt) {
     uk_countdown(&s_say_ms, dt);
     uk_countdown(&s_quiet, dt);
     uk_countdown(&s_over_ms, dt);
+    uk_countdown(&s_pick_deaf, dt);
     if (s_cut != CUT_NONE) {
         s_cut_ms += dt;
         if (s_cut_ms >= (s_cut == CUT_SUPER ? BOMB_CUT_SUPER_MS : BOMB_CUT_SPECIAL_MS)) s_cut = CUT_NONE;
@@ -503,9 +522,10 @@ static void bomb_frame(uint32_t dt) {
     else if (G->phase != BP_WAIT) show_game();
 }
 
-// 一场没打完(包括选人、断线等对方回来)都不让屏幕熄:对方一回来炸弹就在烧,黑屏时第一下 ● 只会点亮屏幕。
+// 一场没打完(包括联机选人、断线等对方回来)都不让屏幕熄:对方一回来炸弹就在烧,黑屏时第一下 ● 只会点亮屏幕。
+// 和电脑打时停在选人页可以熄(没人等着)。
 static unsigned bomb_busy(void) {
-    bool mid = s_page == PG_GAME ? G->phase != BP_OVER
+    bool mid = s_page == PG_GAME ? G->phase != BP_OVER && !(s_mode == MODE_CPU && G->phase == BP_PICK)
                                  : s_page == PG_LINK && s_link.match && !bomb_over(&s_link);
     return mid ? KIT_BUSY_TIMING : 0;
 }

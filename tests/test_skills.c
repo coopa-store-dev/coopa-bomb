@@ -50,7 +50,7 @@ static void test_sling(void) {
     assert(bomb_key(h, BK_UP) && !h->holding && h->en_me == 0 && h->skill_out == SK_SLING);
     flow();
     assert(count_ev(o, BE_SKILL_IN) == 1 && o->skill_in == SK_SLING);
-    assert(o->en_me == 1 && o->en_peer == 0 && h->en_peer == 0);  // 被打中 +1;h 那边下次扔才知道
+    assert(o->en_me == 1 && o->en_peer == 0 && h->en_peer == 1);  // 被打中 +1,放招的一方也跟着记
     check_frozen(o, 600, 1500);
     assert(bomb_can_throw(o));
 }
