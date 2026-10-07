@@ -7,7 +7,10 @@
 bool spr_palette(char c, uint32_t *argb) {
     static const struct { char c; uint32_t argb; } P[] = {
         { 'k', 0xFF2B1B17 }, { 'w', 0xFFFFFFFF }, { 'g', 0xFF4A4A5A }, { 'r', 0xFFD83A3A },
-        { 'y', 0xFFF2C230 }, { 'o', 0xFFE8902A }, { 'x', 0xFF262630 },
+        { 'y', 0xFFF2C230 }, { 'o', 0xFFE8902A }, { 'x', 0xFF262630 }, { 's', 0xFFF5C9A0 }, { 'n', 0xFFD9A066 },
+        { 'h', 0xFFC9C9D6 }, { 'K', 0xFF1E1A1E }, { 'v', 0xFFB9A6E8 }, { 'V', 0xFF8E78C8 }, { 'd', 0xFF3A3A48 },
+        { 'f', 0xFFF29C8C }, { 'z', 0xFF7E2433 }, { 't', 0xFFB8333F }, { 'T', 0xFF6E5A5E }, { 'e', 0xFFD8C8A8 },
+        { 'E', 0xFFB8A888 }, { 'B', 0xFF4A7BD0 },
     };
     if (c == '.') {
         *argb = 0;
