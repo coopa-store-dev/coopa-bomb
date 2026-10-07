@@ -1,5 +1,6 @@
-// tests/test_match.c —— 两个机器人随机对打 100 场:拿到炸弹后随机等 0–2 秒再扔,随机断线。
+// tests/test_match.c —— 两个电脑(bomb_bot,普通)对打 100 场,随机断线。
 // 每场都要两边都到结束页、比分镜像;先手(第 1 回合炸弹给谁)两边都轮得到。
+#include "bomb_bot.h"
 #include "duo.h"
 
 #include <assert.h>
@@ -20,18 +21,19 @@ int main(void) {
         flow();
         duo_pick((uint8_t)(match % BF_COUNT), (uint8_t)(match / BF_COUNT % BF_COUNT));
         if (D.a.holding) first_a++;
-        int64_t wait[2] = { -1, -1 };  // 拿到炸弹后打算等多久再扔(-1 = 还没拿到)
+        bomb_bot_t ba, bb;
+        bomb_bot_init(&ba, BOT_NORMAL, rnd);
+        bomb_bot_init(&bb, BOT_NORMAL, rnd);
         for (int step = 0; step < 100000 && !(D.a.phase == BP_OVER && D.b.phase == BP_OVER); step++) {
             bomb_tick(&D.a, 10);
             bomb_tick(&D.b, 10);
-            bomb_t *bot[2] = { &D.a, &D.b };
+            bomb_t *g[2] = { &D.a, &D.b };
+            bomb_bot_t *bot[2] = { &ba, &bb };
             for (int i = 0; i < 2; i++) {
-                if (!bot[i]->holding || bot[i]->phase != BP_PLAY) {
-                    wait[i] = -1;
-                    continue;
-                }
-                if (wait[i] < 0) wait[i] = BOMB_CATCH_MS + rnd() % 2000;
-                if (bot[i]->hold_ms >= (uint32_t)wait[i] && bomb_press(bot[i])) wait[i] = -1;
+                bomb_seen_t s;
+                bomb_seen(g[i], &s);
+                int k = bomb_bot_step(bot[i], &s, 10);
+                if (k >= 0) bomb_key(g[i], (uint8_t)k);
             }
             if (rnd() % 3000 == 0) {
                 duo_drop();

@@ -188,6 +188,20 @@ static void test_lid(void) {
     assert(o->phase == BP_BOOM && o->loser_me && h->score_me == 1);
 }
 
+static void test_lid_only_next_hold(void) {  // 锅盖只顶放完以后的下一次拿炸弹
+    bomb_t *h = start_with(BF_GRANNY, BF_KID, true), *o = other(h);
+    give(h, 4);
+    ready(h);
+    assert(bomb_key(h, BK_DOWN) && h->lid);
+    flow();
+    run(1200);
+    throw_hit(o);
+    flow();
+    assert(h->lid);
+    throw_hit(h);
+    assert(!h->lid);
+}
+
 static void test_taiji_voids_skill(void) {
     bomb_t *h = start_with(BF_GRANDPA, BF_DAD, true), *o = other(h);
     give(h, 4);
@@ -287,6 +301,7 @@ int main(void) {
     test_nag();
     test_glasses();
     test_lid();
+    test_lid_only_next_hold();
     test_taiji_voids_skill();
     test_taiji_vs_taiji();
     test_lid_into_taiji();

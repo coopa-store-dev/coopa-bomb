@@ -24,8 +24,8 @@
 #define BOMB_MSG_MAX 64
 #define BOMB_WIN 3
 #define BOMB_CATCH_MS 500
-#define BOMB_FUSE_MIN 8000
-#define BOMB_FUSE_MAX 20000
+#define BOMB_FUSE_MIN 11000
+#define BOMB_FUSE_MAX 26000
 #define BOMB_NEXT_MS 2000
 #define BOMB_COUNT_MS 3000
 #define BOMB_HOT_MS 20000  // 过去这么久就最红、最快(只看过去多久)
@@ -123,5 +123,19 @@ bool bomb_unpick(bomb_t *g);                     // 确定后撤回
 void bomb_pump(bomb_t *g);                       // 把排着的消息发出去
 bool bomb_event(bomb_t *g, uint8_t *ev);
 bool bomb_over(const bomb_t *g);                 // 有一方赢够了
+// 玩家(和电脑)看得见的东西:没有引信还剩多少。电脑(bomb_bot)只拿这个,拿不到 bomb_t。
+typedef struct {
+    uint8_t phase;
+    bool holding, can_throw, frozen;  // frozen = 特写 / 闪字中
+    uint8_t cage_left;
+    bool decoy;
+    uint16_t aim_pos;
+    int8_t aim_dir;       // 箭头往哪走:+1 右 / -1 左
+    bomb_aim_t aim;
+    uint8_t heat, en_me, en_peer, me_char, peer_char;
+    uint32_t hold_ms;
+} bomb_seen_t;
+void bomb_seen(const bomb_t *g, bomb_seen_t *s);
+
 uint8_t bomb_heat(const bomb_t *g);              // 0..255:炸弹有多红、多抖
 uint32_t bomb_tick_gap(const bomb_t *g);         // 嘀嗒间隔(毫秒)

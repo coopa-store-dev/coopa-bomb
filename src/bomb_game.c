@@ -411,6 +411,7 @@ bomb_aim_t bomb_aim_now(const bomb_t *g) { return bomb_aim_params(bomb_heat(g), 
 // 扔出去(瞄准扔中,或者放招):把剩下的引信、招式、扔完的能量、回合过去多久带过去。
 static void send_throw(bomb_t *g, uint8_t skill, bool perfect) {
     g->holding = false;
+    g->lid = false;  // 锅盖只顶放完以后的下一次拿炸弹
     clear_hold(g);
     g->throws++;
     uint8_t m[15] = { 'T' };
@@ -457,11 +458,11 @@ static bool cast(bomb_t *g, bool super) {
     uint8_t sk = bomb_skill_of(g->me_char, super);
     if (!sk || !bomb_can_throw(g) || g->en_me < bomb_skill_cost(sk)) return false;
     g->en_me = (uint8_t)(g->en_me - bomb_skill_cost(sk));
-    if (sk == SK_LID) g->lid = true;
     if (sk == SK_TAIJI) g->taiji = true;
     g->skill_out = sk;
     event(g, BE_SKILL_OUT);
     send_throw(g, sk, false);
+    if (sk == SK_LID) g->lid = true;
     if (sk == SK_GLASSES) g->glasses_left = BOMB_GLASSES;  // 扔完才戴上:这一扔不算
     return true;
 }
@@ -541,3 +542,21 @@ uint8_t bomb_heat(const bomb_t *g) {
 }
 
 uint32_t bomb_tick_gap(const bomb_t *g) { return 900u - bomb_heat(g) * 780u / 255u; }
+
+void bomb_seen(const bomb_t *g, bomb_seen_t *s) {
+    s->phase = g->phase;
+    s->holding = g->holding;
+    s->can_throw = bomb_can_throw(g);
+    s->frozen = g->freeze_ms > 0;
+    s->cage_left = g->cage_left;
+    s->decoy = g->decoy != 0;
+    s->aim_pos = bomb_aim_pos(g);
+    s->aim_dir = g->aim_x1000 < 1000000u ? 1 : -1;
+    s->aim = bomb_aim_now(g);
+    s->heat = bomb_heat(g);
+    s->en_me = g->en_me;
+    s->en_peer = g->en_peer;
+    s->me_char = g->me_char;
+    s->peer_char = g->peer_char;
+    s->hold_ms = g->hold_ms;
+}
